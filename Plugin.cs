@@ -11,6 +11,7 @@ using UnityEngine.SceneManagement;
 using StreamCore.YouTube;
 using StreamCore.Utils;
 using StreamCore.Twitch;
+using StreamCore.Bilibili;
 
 namespace StreamCore
 {
@@ -18,6 +19,7 @@ namespace StreamCore
     {
         public static Plugin Instance { get; private set; }
         private readonly TwitchLoginConfig TwitchLoginConfig = new TwitchLoginConfig();
+        private readonly BilibiliLoginConfig BilibiliLoginConfig = new BilibiliLoginConfig();
         public static readonly string ModuleName = "Stream Core";
         public string Name => ModuleName;
         public string Version => "2.2.4";
@@ -56,6 +58,7 @@ namespace StreamCore
             if(arg0.name == "MenuCore")
             {
                 TwitchLoginConfig.Save(true);
+                BilibiliLoginConfig.Save(true);
             }
         }
 
@@ -71,6 +74,7 @@ namespace StreamCore
 
             // Shutdown our twitch client if it's initialized
             TwitchWebSocketClient.Shutdown();
+            BilibiliWebSocketClient.Shutdown();
             YouTubeConnection.Stop();
         }
 
