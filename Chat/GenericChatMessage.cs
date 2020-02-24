@@ -1,5 +1,6 @@
 ﻿using StreamCore.Twitch;
 using StreamCore.YouTube;
+using StreamCore.Bilibili;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,7 @@ namespace StreamCore.Chat
 
         public TwitchUser Twitch { get => (this is TwitchUser) ? this as TwitchUser : new TwitchUser(); }
         public YouTubeUser YouTube { get => (this is YouTubeUser) ? this as YouTubeUser : new YouTubeUser(); }
+        public BilibiliUser Bilibili { get => (this is BilibiliUser) ? this as BilibiliUser : new BilibiliUser(); }
     }
 
     public class GenericChatMessage
@@ -27,5 +29,6 @@ namespace StreamCore.Chat
 
         public TwitchMessage Twitch { get => (this is TwitchMessage) ? this as TwitchMessage : new TwitchMessage(); }
         public YouTubeMessage YouTube { get => (this is YouTubeMessage) ? this as YouTubeMessage : new YouTubeMessage(); }
+        public BilibiliMessage Bilibili { get => (this is BilibiliMessage) ? this as BilibiliMessage : new BilibiliMessage(); }
     }
 }

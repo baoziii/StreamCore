@@ -1,5 +1,6 @@
 ﻿using StreamCore.Twitch;
 using StreamCore.YouTube;
+using StreamCore.Bilibili;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -31,6 +32,10 @@ namespace StreamCore.Chat
     /// Implement this nterface to initialize the Twitch chat service
     /// </summary>
     public interface ITwitchIntegration : IGenericChatIntegration { }
+    /// <summary>
+    /// Implement this nterface to initialize the Bilibili chat service
+    /// </summary>
+    public interface IBilibiliIntegration : IGenericChatIntegration { }
 
 
     public class GlobalChatHandler
@@ -39,15 +44,17 @@ namespace StreamCore.Chat
 
         internal static ChatIntegration<ITwitchIntegration> Twitch = null;
         internal static ChatIntegration<IYouTubeIntegration> YouTube = null;
+        internal static ChatIntegration<IBilibiliIntegration> Bilibili = null;
         internal static ChatIntegration<IGlobalChatIntegration> Global = null;
 
         internal static IEnumerator InitGlobalChatHandlers()
         {
             Twitch = new ChatIntegration<ITwitchIntegration>();
             YouTube = new ChatIntegration<IYouTubeIntegration>();
+            Bilibili = new ChatIntegration<IBilibiliIntegration>();
             Global = new ChatIntegration<IGlobalChatIntegration>();
 
-            bool initTwitch = false, initYouTube = false;
+            bool initTwitch = false, initYouTube = false, initBilibili = false;
             // Iterate through all the message handlers that were registered
             foreach (var instance in registeredInstances)
             {
@@ -72,6 +79,10 @@ namespace StreamCore.Chat
                 {
                     initYouTube = true;
                 }
+                if (typeof(IBilibiliIntegration).IsAssignableFrom(instanceType) || isGlobalIntegration)
+                {
+                    initBilibili = true;
+                }
             }
 
             // Initialize the appropriate streaming services
@@ -82,6 +93,10 @@ namespace StreamCore.Chat
             if (initYouTube)
             {
                 YouTubeConnection.Initialize_Internal();
+            }
+            if (initBilibili)
+            {
+                BilibiliWebSocketClient.Initialize_Internal();
             }
         }
     }
