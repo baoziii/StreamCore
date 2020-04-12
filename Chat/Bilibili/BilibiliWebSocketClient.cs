@@ -7,6 +7,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -17,6 +18,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using WebSocketSharp;
+using BitConverterNew;
 
 namespace StreamCore.Bilibili
 {
@@ -30,6 +32,7 @@ namespace StreamCore.Bilibili
 
         private static Random _rand = new Random();
         private static WebSocket _ws;
+        private static short protocalVersion = 2;
 
         ///<Summary>
         /// Set the DanmukuServer 
@@ -45,6 +48,11 @@ namespace StreamCore.Bilibili
         /// Set the Real Channel id (short_id to long_id if avaliable)
         ///</Summary>
         public static int RealBilibiliChannelId { get; set; } = 0;
+
+        ///<Summary>
+        /// Set the Danmuku User Token
+        ///</Summary>
+        public static string DanmukuToken { get; set; } = "";
 
         ///<Summary>
         /// Display the damuku if 1
@@ -432,174 +440,207 @@ namespace StreamCore.Bilibili
         private static void OnMessageReceived(byte[] rawMessage, string assemblyHash = "")
         {
             int read = 0;
-            while (read < rawMessage.Length) {
-                int packetLength = BufferToInt(rawMessage, read + 0, 4);
-                int headerLength = BufferToInt(rawMessage, read + 4, 2);
-                int protocalVersion = BufferToInt(rawMessage, read + 6, 2);
-                int operation = BufferToInt(rawMessage, read + 8, 4);
-                int sequenceId = BufferToInt(rawMessage, read + 12, 4);
-                string json = "Empty";
+            int packetLength = EndianBitConverter.BigEndian.ToInt32(rawMessage, 0);
+            int headerLength = EndianBitConverter.BigEndian.ToInt16(rawMessage, 4);
+            int protocalVersion = EndianBitConverter.BigEndian.ToInt16(rawMessage, 6);
+            int action = EndianBitConverter.BigEndian.ToInt32(rawMessage, 8);
+            int parameter = EndianBitConverter.BigEndian.ToInt32(rawMessage, 12);
 
-                BilibiliMessage bilibiliMsg = new BilibiliMessage();
-                bilibiliMsg.message = "";
-                bilibiliMsg.messageType = "";
-                /*            Plugin.Log("offset: " + 16 + " count: " + packetLength + " total: " + (16 + packetLength) + " frame length: " + rawMessage.Length);
-                */
-                switch (operation)
+            if (action == 5)
+            {
+                MemoryStream deflatedStream = new MemoryStream();
+                new DeflateStream(new MemoryStream(SubBuffer(rawMessage, headerLength, packetLength - headerLength), 2, packetLength - headerLength - 2), CompressionMode.Decompress).CopyTo(deflatedStream);
+
+                byte[] newRawMessage = deflatedStream.ToArray();
+                while (read < newRawMessage.Length)
                 {
-                    case 8:
-                        int channelId = BilibiliLoginConfig.Instance.BilibiliChannelId;
-                        if (RealBilibiliChannelId != 0) {
-                            channelId = RealBilibiliChannelId;
-                        }
-                        bilibiliMsg.MessageType = "join_channel";
-                        bilibiliMsg.message = "【系统】已连接上房间 " + channelId + " (゜-゜)つロ 干杯~";
-                        bilibiliMsg.messageType = "Bilibili#liveChatMessage";
-                        LoggedIn = true;
-                        Connected = true;
-                        HeartbeatLoop();
-                        break;
-                    case 3:
-                        bilibiliMsg.MessageType = "popularity";
-                        int popularity = BufferToInt(rawMessage, headerLength, 4);
-                        if (popularity > 10000)
-                            json = (popularity / 10000.0) + "w";
-                        else if (popularity > 1000)
-                            json = (popularity / 1000.0) + "k";
-                        else
-                            json = popularity + "";
-                        Plugin.Log("[Bilibili] Get Beat heart");
-                        bilibiliMsg.message = "【人气】当前人气值: " + json;
-                        bilibiliMsg.messageType = "Bilibili#liveChatMessage";
-                        break;
-                    case 5:
-                        json = Encoding.UTF8.GetString(rawMessage, read + headerLength, packetLength - headerLength);
-                        var danmuku = JSON.Parse(json);
-                        switch (danmuku["cmd"].Value)
-                        {
-                            case "DANMU_MSG":
-                                bilibiliMsg.MessageType = "damuku";
-                                bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
-                                /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
-                                break;
-                            case "SEND_GIFT":
-                                bilibiliMsg.MessageType = "gift";
-                                if (danmuku["data"]["combo_num"].Value == "")
-                                {
-                                    bilibiliMsg.message = "【礼物】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value;
-                                }
-                                else
-                                {
-                                    bilibiliMsg.message = "【礼物】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value + " x" + danmuku["data"]["combo_num"].Value;
-                                }
-                                break;
-                            case "COMBO_END":
-                                bilibiliMsg.MessageType = "combo_end";
-                                bilibiliMsg.message = "【连击】" + danmuku["data"]["r_uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
-                                break;
-                            case "COMBO_SEND":
-                                bilibiliMsg.MessageType = "Combo_send";
-                                bilibiliMsg.message = "【连击】" + danmuku["data"]["r_uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
-                                break;
-                            case "WELCOME":
-                                bilibiliMsg.MessageType = "welcome";
-                                bilibiliMsg.message = "【入场】" + "欢迎" + danmuku["data"]["uname"].Value + "进入直播间";
-                                break;
-                            case "WELCOME_GUARD":
-                                bilibiliMsg.MessageType = "welcome_guard";
-                                bilibiliMsg.message = "【舰队】" + "欢迎舰长" + danmuku["data"]["username"].Value + "进入直播间";
-                                break;
-                            case "ENTRY_EFFECT":
-                                bilibiliMsg.MessageType = "effect";
-                                bilibiliMsg.message = "【特效】" + danmuku["data"]["copy_writing"].Value;
-                                break;
-                            case "ROOM_RANK":
-                                bilibiliMsg.MessageType = "global";
-                                bilibiliMsg.message = "【打榜】" + danmuku["data"]["rank_desc"].Value;
-                                break;
-                            case "ACTIVITY_BANNER_UPDATE_V2":
-                                bilibiliMsg.MessageType = "global";
-                                bilibiliMsg.message = "【横幅】" + "当前分区排名" + danmuku["data"]["title"].Value;
-                                break;
-                            case "ROOM_REAL_TIME_MESSAGE_UPDATE":
-                                bilibiliMsg.MessageType = "global";
-                                bilibiliMsg.message = "【关注】" + "粉丝数:" + danmuku["data"]["fans"].Value;
-                                break;
-                            case "NOTICE_MSG":
-                                bilibiliMsg.MessageType = "junk";
-                                bilibiliMsg.message = "【喇叭】";
-                                break;
-                            case "ANCHOR_LOT_START":
-                                bilibiliMsg.MessageType = "anchor_lot_start";
-                                bilibiliMsg.message = "【天选】" + "天选之子活动开始啦";
-                                break;
-                            case "ANCHOR_LOT_CHECKSTATUS":
-                                bilibiliMsg.MessageType = "anchor_lot_checkstatus";
-                                bilibiliMsg.message = "【天选】" + "天选之子活动开始啦";
-                                break;
-                            case "ANCHOR_LOT_END":
-                                bilibiliMsg.MessageType = "anchor_lot_end";
-                                bilibiliMsg.message = "【天选】" + "天选之子活动结束啦，奖品是" + danmuku["data"]["award_name"].Value;
-                                break;
-                            case "ANCHOR_LOT_AWARD":
-                                bilibiliMsg.MessageType = "anchor_lot";
-                                JSONArray list = danmuku["data"]["award_users"].AsArray;
-                                string usernameList = "";
-                                for (int i = 0; i < list.Count; i++)
-                                {
-                                    usernameList = usernameList + list[i]["uname"];
-                                }
-                                bilibiliMsg.message = "【天选】" + "恭喜" + usernameList + "获得" + danmuku["data"]["award_name"].Value;
-                                break;
-                            case "ROOM_BLOCK_MSG":
-                                bilibiliMsg.MessageType = "blacklist";
-                                bilibiliMsg.message = "【封禁】" + danmuku["data"]["uname"].Value + "(UID: " + danmuku["data"]["uid"].Value + ")";
-                                break;
-                            case "GUARD_BUY":
-                                bilibiliMsg.MessageType = "new_guard";
-                                bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "成为" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
-                                break;
-                            case "USER_TOAST_MSG":
-                                bilibiliMsg.MessageType = "new_guard_msg";
-                                bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "开通了" + danmuku["data"]["num"].Value + "个" + danmuku["data"]["unit"].Value + "的" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
-                                break;
-                            case "GUARD_MSG":
-                                bilibiliMsg.MessageType = "guard_msg";
-                                bilibiliMsg.message = "【上舰】" + danmuku["data"]["msg"].Value;
-                                break;
-                            case "GUARD_LOTTERY_START":
-                                bilibiliMsg.MessageType = "guard_lottery_msg";
-                                bilibiliMsg.message = "【抽奖】" + "上舰抽奖开始啦";
-                                break;
-                            case "ROOM_CHANGE":
-                                bilibiliMsg.MessageType = "room_change";
-                                bilibiliMsg.message = "【变更】" + "直播间名称为: " + danmuku["data"]["title"].Value;
-                                break;
-                            case "LIVE":
-                                bilibiliMsg.MessageType = "room_live";
-                                bilibiliMsg.message = "【开播】" + "直播间开播啦";
-                                break;
-                            default:
-                                bilibiliMsg.MessageType = "unkown";
-                                bilibiliMsg.message = "【暂不支持该消息】";
-                                Plugin.Log("Unsupport Message: " + json);
-                                break;
-                        }
-                        bilibiliMsg.messageType = "Bilibili#liveChatMessage";
-                        break;
-                    default:
-                        bilibiliMsg.messageType = "Unkown";
-                        bilibiliMsg.message = "Unsupported Message";
-                        Plugin.Log("Unsupport Message: " + operation);
-                        break;
+                    int packetLength2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 0 + read);
+                    int headerLength2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 4 + read);
+                    int protocalVersion2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 6 + read);
+                    int action2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 8 + read);
+                    int parameter2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 12 + read);
+
+                    formatDanmuku(SubBuffer(newRawMessage, read + headerLength2, packetLength2 - headerLength2), action2);
+
+                    read += packetLength2;
                 }
-                /*Plugin.Log(bilibiliMsg.MessageType);*/
-                if (showDanmuku(bilibiliMsg.MessageType))
-                {
-                    Plugin.Log(bilibiliMsg.message);
-                    BilibiliMessageHandlers.InvokeHandler(bilibiliMsg, "");
-                }
-                read += packetLength;
+            }
+            else {
+                formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action);
+            }
+        }
+
+        private static void formatDanmuku(byte[] buffer, int action) {
+            string json = "Empty";
+            BilibiliMessage bilibiliMsg = new BilibiliMessage();
+            bilibiliMsg.message = "";
+            bilibiliMsg.messageType = "";
+
+            switch (action)
+            {
+                case 8:
+                    int channelId = BilibiliLoginConfig.Instance.BilibiliChannelId;
+                    if (RealBilibiliChannelId != 0)
+                    {
+                        channelId = RealBilibiliChannelId;
+                    }
+                    bilibiliMsg.MessageType = "join_channel";
+                    bilibiliMsg.message = "【系统】已连接上房间 " + channelId + " (゜-゜)つロ 干杯~";
+                    bilibiliMsg.messageType = "Bilibili#liveChatMessage";
+                    LoggedIn = true;
+                    Connected = true;
+                    HeartbeatLoop();
+                    break;
+                case 3:
+                    bilibiliMsg.MessageType = "popularity";
+                    int popularity = EndianBitConverter.BigEndian.ToInt32(buffer, 0);
+                    if (popularity > 10000)
+                        json = (popularity / 10000.0) + "w";
+                    else if (popularity > 1000)
+                        json = (popularity / 1000.0) + "k";
+                    else
+                        json = popularity + "";
+                    bilibiliMsg.message = "【人气】当前人气值: " + json;
+                    bilibiliMsg.messageType = "Bilibili#liveChatMessage";
+                    break;
+                case 5:
+                    json = Encoding.UTF8.GetString(buffer, 0, buffer.Length);
+                    var danmuku = JSON.Parse(json);
+                    switch (danmuku["cmd"].Value)
+                    {
+                        case "DANMU_MSG":
+                            bilibiliMsg.MessageType = "damuku";
+                            bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                            /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
+                            break;
+                        case "SEND_GIFT":
+                            bilibiliMsg.MessageType = "gift";
+                            if (danmuku["data"]["combo_num"].Value == "")
+                            {
+                                bilibiliMsg.message = "【礼物】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value;
+                            }
+                            else
+                            {
+                                bilibiliMsg.message = "【礼物】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            }
+                            break;
+                        case "COMBO_END":
+                            bilibiliMsg.MessageType = "combo_end";
+                            bilibiliMsg.message = "【连击】" + danmuku["data"]["r_uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            break;
+                        case "COMBO_SEND":
+                            bilibiliMsg.MessageType = "Combo_send";
+                            bilibiliMsg.message = "【连击】" + danmuku["data"]["r_uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            break;
+                        case "SUPER_CHAT_MESSAGE":
+                            bilibiliMsg.MessageType = "super_chat";
+                            bilibiliMsg.message = "【醒目留言】(￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " 留言说: " + danmuku["data"]["message"].Value;
+                            break;
+                        case "SUPER_CHAT_MESSAGE_JPN":
+                            bilibiliMsg.MessageType = "super_chat_japanese";
+                            bilibiliMsg.message = "【スーパーチャット】(CNY￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " は言う: " + danmuku["data"]["message_jpn"].Value;
+                            break;
+                        case "WELCOME":
+                            bilibiliMsg.MessageType = "welcome";
+                            bilibiliMsg.message = "【入场】" + "欢迎" + danmuku["data"]["uname"].Value + "进入直播间";
+                            break;
+                        case "WELCOME_GUARD":
+                            bilibiliMsg.MessageType = "welcome_guard";
+                            bilibiliMsg.message = "【舰队】" + "欢迎舰长" + danmuku["data"]["username"].Value + "进入直播间";
+                            break;
+                        case "ENTRY_EFFECT":
+                            bilibiliMsg.MessageType = "effect";
+                            bilibiliMsg.message = "【特效】" + danmuku["data"]["copy_writing"].Value;
+                            break;
+                        case "ROOM_RANK":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "【打榜】" + danmuku["data"]["rank_desc"].Value;
+                            break;
+                        case "ACTIVITY_BANNER_UPDATE_V2":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "【横幅】" + "当前分区排名" + danmuku["data"]["title"].Value;
+                            break;
+                        case "ROOM_REAL_TIME_MESSAGE_UPDATE":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "【关注】" + "粉丝数:" + danmuku["data"]["fans"].Value;
+                            break;
+                        case "NOTICE_MSG":
+                            bilibiliMsg.MessageType = "junk";
+                            bilibiliMsg.message = "【喇叭】" + danmuku["data"]["msg_common"].Value;
+                            break;
+                        case "ANCHOR_LOT_START":
+                            bilibiliMsg.MessageType = "anchor_lot_start";
+                            bilibiliMsg.message = "【天选】" + "天选之子活动开始啦";
+                            break;
+                        case "ANCHOR_LOT_CHECKSTATUS":
+                            bilibiliMsg.MessageType = "anchor_lot_checkstatus";
+                            bilibiliMsg.message = "【天选】" + "天选之子活动开始啦";
+                            break;
+                        case "ANCHOR_LOT_END":
+                            bilibiliMsg.MessageType = "anchor_lot_end";
+                            bilibiliMsg.message = "【天选】" + "天选之子活动结束啦，奖品是" + danmuku["data"]["award_name"].Value;
+                            break;
+                        case "ANCHOR_LOT_AWARD":
+                            bilibiliMsg.MessageType = "anchor_lot";
+                            JSONArray list = danmuku["data"]["award_users"].AsArray;
+                            string usernameList = "";
+                            for (int i = 0; i < list.Count; i++)
+                            {
+                                usernameList = usernameList + list[i]["uname"];
+                            }
+                            bilibiliMsg.message = "【天选】" + "恭喜" + usernameList + "获得" + danmuku["data"]["award_name"].Value;
+                            break;
+                        case "RAFFLE_START":
+                            bilibiliMsg.MessageType = "raffle_start";
+                            bilibiliMsg.message = "【抽奖】" + danmuku["data"]["title"].Value + "开始啦!";
+                            break;
+                        case "ROOM_BLOCK_MSG":
+                            bilibiliMsg.MessageType = "blacklist";
+                            bilibiliMsg.message = "【封禁】" + danmuku["data"]["uname"].Value + "(UID: " + danmuku["data"]["uid"].Value + ")";
+                            break;
+                        case "GUARD_BUY":
+                            bilibiliMsg.MessageType = "new_guard";
+                            bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "成为" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
+                            break;
+                        case "USER_TOAST_MSG":
+                            bilibiliMsg.MessageType = "new_guard_msg";
+                            bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "开通了" + danmuku["data"]["num"].Value + "个" + danmuku["data"]["unit"].Value + "的" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
+                            break;
+                        case "GUARD_MSG":
+                            bilibiliMsg.MessageType = "guard_msg";
+                            bilibiliMsg.message = "【上舰】" + danmuku["data"]["msg"].Value;
+                            break;
+                        case "GUARD_LOTTERY_START":
+                            bilibiliMsg.MessageType = "guard_lottery_msg";
+                            bilibiliMsg.message = "【抽奖】" + "上舰抽奖开始啦";
+                            break;
+                        case "ROOM_CHANGE":
+                            bilibiliMsg.MessageType = "room_change";
+                            bilibiliMsg.message = "【变更】" + "直播间名称为: " + danmuku["data"]["title"].Value;
+                            break;
+                        case "LIVE":
+                            bilibiliMsg.MessageType = "room_live";
+                            bilibiliMsg.message = "【开播】" + "直播间开播啦";
+                            break;
+                        default:
+                            bilibiliMsg.MessageType = "unkown";
+                            bilibiliMsg.message = "【暂不支持该消息】";
+                            Plugin.Log("Unsupport Message: " + danmuku.ToString());
+                            break;
+                    }
+                    bilibiliMsg.messageType = "Bilibili#liveChatMessage";
+                    break;
+                default:
+                    bilibiliMsg.messageType = "Unkown";
+                    bilibiliMsg.message = "Unsupported Message";
+                    Plugin.Log("Unsupport Message: " + action);
+                    break;
+            }
+            /*Plugin.Log(bilibiliMsg.message);*/
+            if (showDanmuku(bilibiliMsg.MessageType))
+            {
+                Plugin.Log(bilibiliMsg.message);
+                BilibiliMessageHandlers.InvokeHandler(bilibiliMsg, "");
             }
         }
         
@@ -635,14 +676,14 @@ namespace StreamCore.Bilibili
             if (type.Equals("join_channel")) {
                 return true;
             }
-            if (type.Equals("damuku") && BilibiliLoginConfig.Instance.danmuku == 1) {
+            if ((type.Equals("damuku") || type.Equals("SUPER_CHAT_MESSAGE") || type.Equals("SUPER_CHAT_MESSAGE_JPY")) && BilibiliLoginConfig.Instance.danmuku == 1) {
                 return true;
             }
             if (type.Equals("popularity") && BilibiliLoginConfig.Instance.popularity == 1)
             {
                 return true;
             }
-            if ((type.Equals("gift") || type.Equals("combo_end") || type.Equals("combo_send")) && BilibiliLoginConfig.Instance.gift == 1)
+            if ((type.Equals("gift") || type.Equals("combo_end") || type.Equals("combo_send") || type.Equals("SUPER_CHAT_MESSAGE") || type.Equals("SUPER_CHAT_MESSAGE_JPY")) && BilibiliLoginConfig.Instance.gift == 1)
             {
                 return true;
             }
@@ -650,7 +691,7 @@ namespace StreamCore.Bilibili
             {
                 return true;
             }
-            if ((type.Equals("anchor_lot_start") || type.Equals("anchor_lot_checkstatus") || type.Equals("anchor_lot_end")) && BilibiliLoginConfig.Instance.anchor == 1)
+            if ((type.Equals("anchor_lot_start") || type.Equals("anchor_lot_checkstatus") || type.Equals("anchor_lot_end") || type.Equals("raffle_start")) && BilibiliLoginConfig.Instance.anchor == 1)
             {
                 return true;
             }
@@ -678,26 +719,26 @@ namespace StreamCore.Bilibili
             return false;
         }
 
-        static private void HeartbeatLoop()
+        private static void HeartbeatLoop()
         {
-            Task.Run(() => {
+            Task.Run(async () => {
                 while (Connected)
                 {
-                    SendHeartbeat();
+                    await SendHeartbeat();
                     Thread.Sleep(30000);
                 }
             });
         }
 
-        static private void SendHeartbeat()
+         private static async Task SendHeartbeat()
         {
-            Plugin.Log("[Bilibili] Send Beat heart");
-            SendSocketData(0, 16, 1, 2, 1, "");
+            /*Plugin.Log("[Bilibili] Send Beat heart");*/
+            await SendSocketDataAsync(0, 16, protocalVersion, 2, 1, "");
         }
 
         /*Refernce https://github.com/copyliu/bililive_dm/blob/master/BiliDMLib/DanmakuLoader.cs*/
 
-        static void SendSocketData(int packetlength, short magic, short ver, int action, int param = 1, string body = "")
+        private static async Task SendSocketDataAsync(int packetlength, short magic, short ver, int action, int param = 1, string body = "")
         {
             var playload = Encoding.UTF8.GetBytes(body);
             if (packetlength == 0)
@@ -707,22 +748,25 @@ namespace StreamCore.Bilibili
             var buffer = new byte[packetlength];
             using (var ms = new MemoryStream(buffer))
             {
-                var b = ToBE(BitConverter.GetBytes(buffer.Length));
+                var b = EndianBitConverter.BigEndian.GetBytes(buffer.Length);
 
-                ms.Write(b, 0, 4);
-                b = ToBE(BitConverter.GetBytes(magic));
-                ms.Write(b, 0, 2);
-                b = ToBE(BitConverter.GetBytes(ver));
-                ms.Write(b, 0, 2);
-                b = ToBE(BitConverter.GetBytes(action));
-                ms.Write(b, 0, 4);
-                b = ToBE(BitConverter.GetBytes(param));
-                ms.Write(b, 0, 4);
+                await ms.WriteAsync(b, 0, 4);
+                b = EndianBitConverter.BigEndian.GetBytes(magic);
+                await ms.WriteAsync(b, 0, 2);
+                b = EndianBitConverter.BigEndian.GetBytes(ver);
+                await ms.WriteAsync(b, 0, 2);
+                b = EndianBitConverter.BigEndian.GetBytes(action);
+                await ms.WriteAsync(b, 0, 4);
+                b = EndianBitConverter.BigEndian.GetBytes(param);
+                await ms.WriteAsync(b, 0, 4);
                 if (playload.Length > 0)
                 {
                     ms.Write(playload, 0, playload.Length);
                 }
-                try { _ws.Send(buffer); } catch (Exception ex) { }
+                try {
+                    _ws.SendAsync(buffer, null);
+                    /*_ws.Send(buffer);*/
+                } catch (Exception ex) { }
             }
         }
 
@@ -733,13 +777,16 @@ namespace StreamCore.Bilibili
             Random r = new Random();
             payload.Add("roomid", channelId);
             payload.Add("uid", (long)(1e14 + 2e14 * r.NextDouble()));
+            payload.Add("token", DanmukuToken);
             Plugin.Log("[Bilibili] Send Socket Data of: " + payload.ToString());
-            SendSocketData(0, 16, 1, 7, 1, payload.ToString());
+            Task.Run(async () => {
+                await SendSocketDataAsync(0, 16, protocalVersion, 7, 1, payload.ToString());
+            });
             return true;
         }
 
         // Reference https://github.com/copyliu/bililive_dm/blob/master/BiliDMLib/utils.cs
-        private static byte[] ToBE(byte[] b)
+        /*private static byte[] ToBE(byte[] b)
         {
             if (BitConverter.IsLittleEndian)
             {
@@ -772,6 +819,19 @@ namespace StreamCore.Bilibili
                 value = BitConverter.ToInt32(hex, 0);
             }
             return value;
+        }*/
+
+        private static byte[] SubBuffer(byte[] buffer, int offset, int count)
+        {
+            if (offset + count <= buffer.Length) {
+                byte[] newBuffer = new byte[count];
+                for (int i = offset; i < offset + count; i++)
+                {
+                    newBuffer[i - offset] = buffer[i];
+                }
+                return newBuffer;
+            }
+            return new byte[0];
         }
     }
 }

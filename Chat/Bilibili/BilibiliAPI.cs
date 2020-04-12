@@ -40,6 +40,7 @@ namespace StreamCore.Bilibili
                 {
                     BilibiliWebSocketClient.DanmukuServer = NewLiveConfig["data"]["host"];
                     BilibiliWebSocketClient.DanmukuServerPort = NewLiveConfig["data"]["port"];
+                    BilibiliWebSocketClient.DanmukuToken = NewLiveConfig["data"]["token"];
                 }
             }
             catch { }

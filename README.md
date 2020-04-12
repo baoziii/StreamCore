@@ -1,10 +1,51 @@
 # Mod Info
-StreamCore is an IPA based mod designed to allow developers to create interactive chat experiences with ease. At the time of writing StreamCore supports Twitch and YouTube.
+StreamCore is an IPA based mod designed to allow developers to create interactive chat experiences with ease. At the time of writing StreamCore supports Twitch, YouTube and Bilibili.
 
-# Config File
+# Config File (配置文件)
 Config files can be found in the `UserData\StreamCore` folder. This folder will be referenced as the `config folder` for the remainder of this readme.
 
+你可以在游戏的 `UserData\StreamCore` 文件夹中找到与以下说明相对应的配置文件。
+
+# Bilibili Config (哔哩哔哩配置)
+
+Bilibili configuration has lots of settings. You can control the plugin to display which type of message as you want. Most of the features are not require for user info. Bilibili config file described below.
+
+哔哩哔哩的配置项可以让你自由的选择想要显示的弹幕种类。大部分的功能不需要任何用户信息。
+
+### BilibiliLoginInfo.ini
+
+| Option (配置项)       | Description (描述)                                           |
+| --------------------- | ------------------------------------------------------------ |
+| **BilibiliChannelId** | The channel id of the Bilibili live channel you want to join (both short id or long id are supported) |
+| **BilibiliCookie**    | Your bilibili cookie for the account you want to send messages as in chat (Not Supported yet, leave it blank) |
+| **danmuku**           | If you want to display danmuku (include Super Chat Message) message, set to 1, other wise 0 |
+| **popularity**        | If you want to display channel popularity, set to 1, other wise 0 |
+| **gift**              | If you want to display gift (include Super Chat Message) message, set to 1, other wise 0 |
+| **guard**             | If you want to display guard info, set to 1, other wise 0    |
+| **welcome**           | If you want to display welcome banner, set to 1, other wise 0 |
+| **anchor**            | If you want to display anchor info, set to 1, other wise 0   |
+| **global**            | If you want to display bilibili global message, set to 1, other wise 0 |
+| **blacklist**         | If you want to display channel blacklist update info, set to 1, other wise 0 |
+| **roomInfo**          | If you want to display channel update info, set to 1, other wise 0 |
+| **junk**              | If you want to display junks or unsupported message, set to 1, other wise 0 |
+
+| 配置项                | 描述                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| **BilibiliChannelId** | 直播间房间号(长号和短号都支持)                               |
+| **BilibiliCookie**    | 你的哔哩哔哩账号Cookie(一般在网页版登陆后可以找到，现在没有用到它的必要，留空就行) |
+| **danmuku**           | 弹幕信息显示开关(包括醒目留言)。1为开，0为关                 |
+| **popularity**        | 人气值显示开关(包括醒目留言)。1为开，0为关                   |
+| **gift**              | 礼物信息显示开关(包括醒目留言)。1为开，0为关                 |
+| **guard**             | 舰长信息显示开关(舰长进入，上舰等)。1为开，0为关             |
+| **welcome**           | 欢迎信息显示开关(老爷入场，舰长入场)。1为开，0为关           |
+| **anchor**            | 天选之子显示开关。1为开，0为关                               |
+| **global**            | 全站广播显示开关。1为开，0为关                               |
+| **blacklist**         | 黑名单变动信息显示开关。1为开，0为关                         |
+| **roomInfo**          | 房间信息变动显示开关。1为开，0为关                           |
+| **junk**              | 垃圾消息以及暂不支持信息的显示开关。1为开，0为关             |
+
 # Twitch Config
+
 Twitch configuration is very straightforward, click the link below to generate an OAuth token and copy it into the Twitch login file described below.
 
 ### TwitchLoginInfo.ini
