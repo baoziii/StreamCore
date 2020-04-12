@@ -22,7 +22,7 @@ namespace StreamCore
         private readonly BilibiliLoginConfig BilibiliLoginConfig = new BilibiliLoginConfig();
         public static readonly string ModuleName = "Stream Core";
         public string Name => ModuleName;
-        public string Version => "2.2.4";
+        public string Version => "2.2.6";
 
         private static readonly object _loggerLock = new object();
         public static void Log(string text,
