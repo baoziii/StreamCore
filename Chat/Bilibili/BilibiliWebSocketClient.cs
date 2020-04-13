@@ -446,27 +446,57 @@ namespace StreamCore.Bilibili
             int action = EndianBitConverter.BigEndian.ToInt32(rawMessage, 8);
             int parameter = EndianBitConverter.BigEndian.ToInt32(rawMessage, 12);
 
-            if (action == 5)
+            if (protocalVersion == 1)
             {
-                MemoryStream deflatedStream = new MemoryStream();
-                new DeflateStream(new MemoryStream(SubBuffer(rawMessage, headerLength, packetLength - headerLength), 2, packetLength - headerLength - 2), CompressionMode.Decompress).CopyTo(deflatedStream);
-
-                byte[] newRawMessage = deflatedStream.ToArray();
-                while (read < newRawMessage.Length)
+                formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action); // For popularity
+            }
+            else if (protocalVersion == 2)
+            { // compressed Buffer
+                if (action == 5)
                 {
-                    int packetLength2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 0 + read);
-                    int headerLength2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 4 + read);
-                    int protocalVersion2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 6 + read);
-                    int action2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 8 + read);
-                    int parameter2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 12 + read);
+                    MemoryStream deflatedStream = new MemoryStream();
+                    new DeflateStream(new MemoryStream(SubBuffer(rawMessage, headerLength, packetLength - headerLength), 2, packetLength - headerLength - 2), CompressionMode.Decompress).CopyTo(deflatedStream);
 
-                    formatDanmuku(SubBuffer(newRawMessage, read + headerLength2, packetLength2 - headerLength2), action2);
+                    byte[] newRawMessage = deflatedStream.ToArray();
+                    while (read < newRawMessage.Length)
+                    {
+                        int packetLength2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 0 + read);
+                        int headerLength2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 4 + read);
+                        int protocalVersion2 = EndianBitConverter.BigEndian.ToInt16(newRawMessage, 6 + read);
+                        int action2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 8 + read);
+                        int parameter2 = EndianBitConverter.BigEndian.ToInt32(newRawMessage, 12 + read);
 
-                    read += packetLength2;
+                        formatDanmuku(SubBuffer(newRawMessage, read + headerLength2, packetLength2 - headerLength2), action2);
+
+                        read += packetLength2;
+                    }
+                }
+                else
+                {
+                    formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action);
                 }
             }
-            else {
-                formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action);
+            else if (protocalVersion == 0)
+            { // Plain Json text
+                if (action == 5)
+                {
+                    while (read < rawMessage.Length)
+                    {
+                        int packetLength2 = EndianBitConverter.BigEndian.ToInt32(rawMessage, 0 + read);
+                        int headerLength2 = EndianBitConverter.BigEndian.ToInt16(rawMessage, 4 + read);
+                        int protocalVersion2 = EndianBitConverter.BigEndian.ToInt16(rawMessage, 6 + read);
+                        int action2 = EndianBitConverter.BigEndian.ToInt32(rawMessage, 8 + read);
+                        int parameter2 = EndianBitConverter.BigEndian.ToInt32(rawMessage, 12 + read);
+
+                        formatDanmuku(SubBuffer(rawMessage, read + headerLength2, packetLength2 - headerLength2), action2);
+
+                        read += packetLength2;
+                    }
+                }
+                else
+                {
+                    formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action);
+                }
             }
         }
 
