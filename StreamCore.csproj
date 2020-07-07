@@ -12,7 +12,7 @@
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
-	<GameDirPath>S:\Game\SteamLibrary\steamapps\common\Beat Saber</GameDirPath>
+    <GameDirPath>S:\Game\SteamLibrary\steamapps\common\Beat Saber</GameDirPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -194,6 +194,7 @@
     <Compile Include="Chat\YouTube\YouTubeMessageHandlers.cs" />
     <Compile Include="Chat\YouTube\YouTubeOAuthToken.cs" />
     <Compile Include="Chat\YouTube\YouTubeData.cs" />
+    <Compile Include="Update.cs" />
     <Compile Include="Config\BilibiliLoginConfig.cs" />
     <Compile Include="Config\ObjectSerializer.cs" />
     <Compile Include="Config\TwitchLoginConfig.cs" />
