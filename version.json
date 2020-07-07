@@ -1,0 +1,12 @@
+{
+	"latest": {
+		"VersionNumber": 2270,
+		"Version": "v2.2.7",
+		"ChangeLog": {
+			"English": "①Fix wrong gift and guard info. ②Add plugin update notification.",
+			"ChineseSimplified": "①修复了礼物和上舰相关信息之前显示错误的问题。②增加插件更新提醒功能。"
+		}
+	},
+	"history": [
+	]
+}
