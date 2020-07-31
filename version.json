@@ -1,13 +1,22 @@
 {
-	"latest": {
-		"VersionNumber": 2270,
-		"Version": "v2.2.7",
-		"ChangeLog": {
-			"English": "①Fix wrong gift and guard info. ②Add plugin update notification.",
-			"ChineseSimplified": "①修复了礼物和上舰相关信息之前显示错误的问题。②增加插件更新提醒功能。"
-		},
-		"Download": "https://github.com/baoziii/StreamCore/releases/tag/v2.2.7"
-	},
-	"history": [
-	]
+    "latest": {
+        "VersionNumber": 2280,
+        "Version": "v2.2.8-Alpha1",
+        "ChangeLog": {
+            "English": "①Add danmuku command support. ②Add ban list configuration.",
+            "ChineseSimplified": "①新增弹幕指令支持。②增加和谐列表配置文件。"
+        },
+        "Download": "https://github.com/baoziii/StreamCore/releases/"
+    },
+    "history": [
+        {
+            "VersionNumber": 2270,
+            "Version": "v2.2.7",
+            "ChangeLog": {
+                "English": "①Fix wrong gift and guard info. ②Add plugin update notification.",
+                "ChineseSimplified": "①修复了礼物和上舰相关信息之前显示错误的问题。②增加插件更新提醒功能。"
+            },
+            "Download": "https://github.com/baoziii/StreamCore/releases/tag/v2.2.7"
+        }
+    ]
 }
