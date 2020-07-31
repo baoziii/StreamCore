@@ -50,6 +50,11 @@ namespace StreamCore.Bilibili
         public static int RealBilibiliChannelId { get; set; } = 0;
 
         ///<Summary>
+        /// Set the Channel Master uid
+        ///</Summary>
+        public static string BilibiliChannelMaster { get; set; } = "";
+
+        ///<Summary>
         /// Set the Danmuku User Token
         ///</Summary>
         public static string DanmukuToken { get; set; } = "";
@@ -149,6 +154,11 @@ namespace StreamCore.Bilibili
         private static int _messageLimit { get => 1; } // Defines how many messages can be sent within _sendResetInterval without causing a global ban on bilibili 
         private static ConcurrentQueue<KeyValuePair<int, string>> _sendQueue = new ConcurrentQueue<KeyValuePair<int, string>>();
         private static bool updateInfoShown = false;
+
+        /// <summary>
+        /// A Dictionary stores ban rules from "UserData/BanList.ini".
+        /// </summary>
+        public static Dictionary<string, List<string>> banListRule { get; set; } = new Dictionary<string, List<string>>();
         
         internal static void Initialize_Internal()
         {
@@ -160,6 +170,7 @@ namespace StreamCore.Bilibili
             _lastChannel = BilibiliLoginConfig.Instance.BilibiliChannelId;
             BilibiliAPI.GetChannelConfig(BilibiliLoginConfig.Instance.BilibiliChannelId);
             BilibiliLoginConfig.Instance.ConfigChangedEvent += Instance_ConfigChangedEvent;
+            BilibiliLoginConfig.BanListConfigLoad();
             Initialized = true;
             Task.Run(() => {
                 Thread.Sleep(1000);
@@ -452,13 +463,10 @@ namespace StreamCore.Bilibili
             int parameter = EndianBitConverter.BigEndian.ToInt32(rawMessage, 12);
             
             if (protocalVersion == 1) {
-			 
                 formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action); // For popularity
             }
             else if (protocalVersion == 2) { // compressed Buffer
-								  
                 if (action == 5) {
-				 
                     MemoryStream deflatedStream = new MemoryStream();
                     new DeflateStream(new MemoryStream(SubBuffer(rawMessage, headerLength, packetLength - headerLength), 2, packetLength - headerLength - 2), CompressionMode.Decompress).CopyTo(deflatedStream);
 
@@ -482,7 +490,6 @@ namespace StreamCore.Bilibili
                 }
             }
             else if (protocalVersion == 0) { // Plain Json text
-								
                 if (action == 5)
                 {
                     while (read < rawMessage.Length)
@@ -499,7 +506,6 @@ namespace StreamCore.Bilibili
                     }
                 }
                 else {
-				 
                     formatDanmuku(SubBuffer(rawMessage, headerLength, packetLength - headerLength), action);
                 }
             }
@@ -546,14 +552,60 @@ namespace StreamCore.Bilibili
                     switch (danmuku["cmd"].Value)
                     {
                         case "DANMU_MSG":
-                            bilibiliMsg.MessageType = "damuku";
-                            bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
-                            /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
+                            if (danmuku["info"][2][2].Value == "1" || danmuku["info"][2][0].Value == BilibiliChannelMaster) {
+                                if (danmuku["info"][1].Value == "!clr")
+                                {
+                                    Plugin.Log("Receive request to clear danmuku!");
+                                    bilibiliMsg.MessageType = "StreamCoreCMD_ClearMsg";
+                                    if (danmuku["info"][2][2].Value == "1")
+                                    {
+                                        bilibiliMsg.message = $"房管 {danmuku["info"][2][1].Value} 清除了弹幕";
+                                    }
+                                    else
+                                    {
+                                        bilibiliMsg.message = $"主播 {danmuku["info"][2][1].Value} 清除了弹幕";
+                                    }
+                                }
+                                else if (danmuku["info"][1].Value.StartsWith("!ban_usr "))
+                                {
+                                    bilibiliMsg.MessageType = "StreamCoreCMD_DeleteMsgByUser";
+                                    bilibiliMsg.message = danmuku["info"][1].Value.Substring(9);
+                                    Plugin.Log($"Receive request to delete danmuku contains username({bilibiliMsg.message})!");
+                                }
+                                else if (danmuku["info"][1].Value.StartsWith("!ban_word "))
+                                {
+                                    bilibiliMsg.MessageType = "StreamCoreCMD_DeleteMsgByWord";
+                                    bilibiliMsg.message = danmuku["info"][1].Value.Substring(10);
+                                    Plugin.Log($"Receive request to delete danmuku contains keyword({bilibiliMsg.message})!");
+                                }
+                                else {
+                                    bilibiliMsg.MessageType = "damuku";
+                                    bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                                }
+                            } else {
+                                bilibiliMsg.MessageType = "damuku";
+                                bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                                /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
+                                if (BanListDetect(danmuku["info"][2][0].Value.ToString(), "uid") || BanListDetect(danmuku["info"][2][1].Value.ToString(), "username") || BanListDetect(danmuku["info"][1].Value.ToString(), "content"))
+                                    bilibiliMsg.MessageType = "banned";
+                            }
+                            
                             break;
                         case "DANMU_MSG:4:0:2:2:2:0":
-                            bilibiliMsg.MessageType = "damuku";
-                            bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
-                            bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                            if ((danmuku["info"][1].Value == "!clr") && (danmuku["info"][2][2].Value == "1" || danmuku["info"][2][0].Value == BilibiliChannelMaster))
+                            {
+                                bilibiliMsg.MessageType = "StreamCoreCMD_ClearMsg";
+                                bilibiliMsg.message = danmuku["info"][2][1].Value;
+                            }
+                            else
+                            {
+                                bilibiliMsg.MessageType = "damuku";
+                                bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                                /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
+                                if (BanListDetect(danmuku["info"][2][0].Value.ToString(), "uid") || BanListDetect(danmuku["info"][2][1].Value.ToString(), "username") || BanListDetect(danmuku["info"][1].Value.ToString(), "content"))
+                                    bilibiliMsg.MessageType = "banned";
+                            }
+
                             break;
                         case "SEND_GIFT":
                             bilibiliMsg.MessageType = "gift";
@@ -565,34 +617,56 @@ namespace StreamCore.Bilibili
                             {
                                 bilibiliMsg.message = "【礼物】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value + " x" + danmuku["data"]["combo_num"].Value;
                             }
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "COMBO_END":
                             bilibiliMsg.MessageType = "combo_end";
                             bilibiliMsg.message = "【连击】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "COMBO_SEND":
                             bilibiliMsg.MessageType = "Combo_send";
                             bilibiliMsg.message = "【连击】" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "SUPER_CHAT_MESSAGE":
                             bilibiliMsg.MessageType = "super_chat";
                             bilibiliMsg.message = "【醒目留言】(￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " 留言说: " + danmuku["data"]["message"].Value;
+                            if (BanListDetect(danmuku["data"]["user_info"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["user_info"]["uname"].Value.ToString(), "username") || BanListDetect(danmuku["data"]["message"].Value.ToString(), "content"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "SUPER_CHAT_MESSAGE_JPN":
                             bilibiliMsg.MessageType = "super_chat_japanese";
                             bilibiliMsg.message = "【スーパーチャット】(CNY￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " は言う: " + danmuku["data"]["message_jpn"].Value;
+                            if (BanListDetect(danmuku["data"]["user_info"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["user_info"]["uname"].Value.ToString(), "username") || BanListDetect(danmuku["data"]["message"].Value.ToString(), "content"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "WELCOME":
                             bilibiliMsg.MessageType = "welcome";
+                            bilibiliMsg.message = "【入场】" + "欢迎老爷" + danmuku["data"]["uname"].Value + "进入直播间";
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
+                            break;
+                        case "INTERACT_WORD":
+                            bilibiliMsg.MessageType = "welcome";
                             bilibiliMsg.message = "【入场】" + "欢迎" + danmuku["data"]["uname"].Value + "进入直播间";
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "WELCOME_GUARD":
                             bilibiliMsg.MessageType = "welcome_guard";
                             bilibiliMsg.message = "【舰队】" + "欢迎舰长" + danmuku["data"]["username"].Value + "进入直播间";
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["uname"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "ENTRY_EFFECT":
                             bilibiliMsg.MessageType = "effect";
                             bilibiliMsg.message = "【特效】" + danmuku["data"]["copy_writing"].Value.Replace("<%", "").Replace("%>", "");
+                            if (BanListDetect(danmuku["data"]["copy_writing"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "ROOM_RANK":
                             bilibiliMsg.MessageType = "global";
@@ -628,7 +702,7 @@ namespace StreamCore.Bilibili
                             string usernameList = "";
                             for (int i = 0; i < list.Count; i++)
                             {
-                                usernameList = usernameList + list[i]["uname"];
+                                usernameList += (BanListDetect(list[i]["uname"].Value.ToString(), "username") || BanListDetect(list[i]["uid"].Value.ToString(), "uid")) ? "【该用户已被过滤】" : list[i]["uname"].Value.ToString();
                             }
                             bilibiliMsg.message = "【天选】" + "恭喜" + usernameList + "获得" + danmuku["data"]["award_name"].Value;
                             break;
@@ -643,21 +717,29 @@ namespace StreamCore.Bilibili
                         case "GUARD_BUY":
                             bilibiliMsg.MessageType = "new_guard";
                             bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "成为" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["username"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "USER_TOAST_MSG":
                             bilibiliMsg.MessageType = "new_guard_msg";
                             bilibiliMsg.message = "【上舰】" + danmuku["data"]["username"].Value + "开通了" + danmuku["data"]["num"].Value + "个" + danmuku["data"]["unit"].Value + "的" + danmuku["data"]["role_name"].Value + "进入舰队啦";
+                            if (BanListDetect(danmuku["data"]["uid"].Value.ToString(), "uid") || BanListDetect(danmuku["data"]["username"].Value.ToString(), "username"))
+                                bilibiliMsg.MessageType = "banned";
                             break;
                         case "GUARD_MSG":
                             if (danmuku["broadcast_type"].Value != "0")
                             {
                                 bilibiliMsg.MessageType = "guard_msg";
                                 bilibiliMsg.message = "【上舰】" + danmuku["data"]["msg"].Value.Replace(":?", "");
+                                if (BanListDetect(danmuku["data"]["msg"].Value.ToString(), "username"))
+                                    bilibiliMsg.MessageType = "banned";
                             }
                             else
                             {
                                 bilibiliMsg.MessageType = "junk";
                                 bilibiliMsg.message = "【上舰广播】" + danmuku["data"]["msg"].Value.Replace(":?", "");
+                                if (BanListDetect(danmuku["data"]["msg"].Value.ToString(), "username") || BanListDetect(danmuku["data"]["msg"].Value.ToString(), "content"))
+                                    bilibiliMsg.MessageType = "banned";
                             }
                             break;
                         case "GUARD_LOTTERY_START":
@@ -682,6 +764,143 @@ namespace StreamCore.Bilibili
                             Plugin.Log("Unsupport Message: " + danmuku.ToString());
                             break;
                     }
+                    /*switch (danmuku["cmd"].Value)
+                    {
+                        case "DANMU_MSG":
+                            bilibiliMsg.MessageType = "damuku";
+                            bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                            break;
+                        case "DANMU_MSG:4:0:2:2:2:0":
+                            bilibiliMsg.MessageType = "damuku";
+                            bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
+                            break;
+                        case "SEND_GIFT":
+                            bilibiliMsg.MessageType = "gift";
+                            if (danmuku["data"]["combo_num"].Value == "")
+                            {
+                                bilibiliMsg.message = "🎁" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value;
+                            }
+                            else
+                            {
+                                bilibiliMsg.message = "🎁" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["num"].Value + "个" + danmuku["data"]["giftName"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            }
+                            break;
+                        case "COMBO_END":
+                            bilibiliMsg.MessageType = "combo_end";
+                            bilibiliMsg.message = "🥊" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            break;
+                        case "COMBO_SEND":
+                            bilibiliMsg.MessageType = "Combo_send";
+                            bilibiliMsg.message = "🥊" + danmuku["data"]["uname"].Value + danmuku["data"]["action"].Value + danmuku["data"]["gift_num"].Value + "个" + danmuku["data"]["gift_name"].Value + " x" + danmuku["data"]["combo_num"].Value;
+                            break;
+                        case "SUPER_CHAT_MESSAGE":
+                            bilibiliMsg.MessageType = "super_chat";
+                            bilibiliMsg.message = "💴(￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " 留言说: " + danmuku["data"]["message"].Value;
+                            break;
+                        case "SUPER_CHAT_MESSAGE_JPN":
+                            bilibiliMsg.MessageType = "super_chat_japanese";
+                            bilibiliMsg.message = "💴(CNY￥" + danmuku["data"]["price"].Value + ") " + danmuku["data"]["user_info"]["uname"].Value + " は言う: " + danmuku["data"]["message_jpn"].Value;
+                            break;
+                        case "WELCOME":
+                            bilibiliMsg.MessageType = "welcome";
+                            bilibiliMsg.message = "👏" + "欢迎" + danmuku["data"]["uname"].Value + "进入直播间";
+                            break;
+                        case "WELCOME_GUARD":
+                            bilibiliMsg.MessageType = "welcome_guard";
+                            bilibiliMsg.message = "⚓" + "欢迎舰长" + danmuku["data"]["username"].Value + "进入直播间";
+                            break;
+                        case "ENTRY_EFFECT":
+                            bilibiliMsg.MessageType = "effect";
+                            bilibiliMsg.message = "✨" + danmuku["data"]["copy_writing"].Value.Replace("<%", "").Replace("%>", "");
+                            break;
+                        case "ROOM_RANK":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "🥇" + danmuku["data"]["rank_desc"].Value;
+                            break;
+                        case "ACTIVITY_BANNER_UPDATE_V2":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "💴" + "当前分区排名" + danmuku["data"]["title"].Value;
+                            break;
+                        case "ROOM_REAL_TIME_MESSAGE_UPDATE":
+                            bilibiliMsg.MessageType = "global";
+                            bilibiliMsg.message = "❤" + "粉丝数:" + danmuku["data"]["fans"].Value;
+                            break;
+                        case "NOTICE_MSG":
+                            bilibiliMsg.MessageType = "junk";
+                            bilibiliMsg.message = "📢" + danmuku["data"]["msg_common"].Value;
+                            break;
+                        case "ANCHOR_LOT_START":
+                            bilibiliMsg.MessageType = "anchor_lot_start";
+                            bilibiliMsg.message = "👼" + "天选之子活动开始啦";
+                            break;
+                        case "ANCHOR_LOT_CHECKSTATUS":
+                            bilibiliMsg.MessageType = "anchor_lot_checkstatus";
+                            bilibiliMsg.message = "👼" + "天选之子活动开始啦";
+                            break;
+                        case "ANCHOR_LOT_END":
+                            bilibiliMsg.MessageType = "anchor_lot_end";
+                            bilibiliMsg.message = "👼" + "天选之子活动结束啦，奖品是" + danmuku["data"]["award_name"].Value;
+                            break;
+                        case "ANCHOR_LOT_AWARD":
+                            bilibiliMsg.MessageType = "anchor_lot";
+                            JSONArray list = danmuku["data"]["award_users"].AsArray;
+                            string usernameList = "";
+                            for (int i = 0; i < list.Count; i++)
+                            {
+                                usernameList = usernameList + list[i]["uname"];
+                            }
+                            bilibiliMsg.message = "👼" + "恭喜" + usernameList + "获得" + danmuku["data"]["award_name"].Value;
+                            break;
+                        case "RAFFLE_START":
+                            bilibiliMsg.MessageType = "raffle_start";
+                            bilibiliMsg.message = "🎰" + danmuku["data"]["title"].Value + "开始啦!";
+                            break;
+                        case "ROOM_BLOCK_MSG":
+                            bilibiliMsg.MessageType = "blacklist";
+                            bilibiliMsg.message = "⛔" + danmuku["data"]["uname"].Value + "(UID: " + danmuku["data"]["uid"].Value + ")";
+                            break;
+                        case "GUARD_BUY":
+                            bilibiliMsg.MessageType = "new_guard";
+                            bilibiliMsg.message = "⚓" + danmuku["data"]["username"].Value + "成为" + danmuku["data"]["gift_name"].Value + "进入舰队啦";
+                            break;
+                        case "USER_TOAST_MSG":
+                            bilibiliMsg.MessageType = "new_guard_msg";
+                            bilibiliMsg.message = "⚓" + danmuku["data"]["username"].Value + "开通了" + danmuku["data"]["num"].Value + "个" + danmuku["data"]["unit"].Value + "的" + danmuku["data"]["role_name"].Value + "进入舰队啦";
+                            break;
+                        case "GUARD_MSG":
+                            if (danmuku["broadcast_type"].Value != "0")
+                            {
+                                bilibiliMsg.MessageType = "guard_msg";
+                                bilibiliMsg.message = "⚓" + danmuku["data"]["msg"].Value.Replace(":?", "");
+                            }
+                            else
+                            {
+                                bilibiliMsg.MessageType = "junk";
+                                bilibiliMsg.message = "📢" + danmuku["data"]["msg"].Value.Replace(":?", "");
+                            }
+                            break;
+                        case "GUARD_LOTTERY_START":
+                            bilibiliMsg.MessageType = "guard_lottery_msg";
+                            bilibiliMsg.message = "🎁" + "上舰抽奖开始啦";
+                            break;
+                        case "ROOM_CHANGE":
+                            bilibiliMsg.MessageType = "room_change";
+                            bilibiliMsg.message = "🔃" + "直播间名称为: " + danmuku["data"]["title"].Value;
+                            break;
+                        case "PREPARING":
+                            bilibiliMsg.MessageType = "room_perparing";
+                            bilibiliMsg.message = "🔚" + "直播间准备中";
+                            break;
+                        case "LIVE":
+                            bilibiliMsg.MessageType = "room_live";
+                            bilibiliMsg.message = "🔛" + "直播间开播啦";
+                            break;
+                        default:
+                            bilibiliMsg.MessageType = "unkown";
+                            bilibiliMsg.message = "❔";
+                            Plugin.Log("Unsupport Message: " + danmuku.ToString());
+                            break;
+                    }*/
                     bilibiliMsg.messageType = "Bilibili#liveChatMessage";
                     break;
                 default:
@@ -704,7 +923,9 @@ namespace StreamCore.Bilibili
                     Plugin.Log("Show Update Info");
                     /*BilibiliMessageHandlers.InvokeHandler(bilibiliMsgUpdateInfo, "");*/
                     updateInfoShown = true;
-                    bilibiliMsg.message += "\n" + Update.GetMessage();
+/*                    if (Update.GetMessage() != "") {
+                        bilibiliMsg.message += "\n" + Update.GetMessage();
+                    }*/
                 }
 
                 BilibiliMessageHandlers.InvokeHandler(bilibiliMsg, "");
@@ -740,7 +961,7 @@ namespace StreamCore.Bilibili
         }
 
         private static bool showDanmuku(string type) {
-            if (type.Equals("join_channel")) {
+            if (type.Equals("join_channel") || type.Equals("StreamCoreCMD_ClearMsg") || type.Equals("StreamCoreCMD_DeleteMsgByUser") || type.Equals("StreamCoreCMD_DeleteMsgByWord")) {
                 return true;
             }
             if ((type.Equals("damuku") || type.Equals("SUPER_CHAT_MESSAGE") || type.Equals("SUPER_CHAT_MESSAGE_JPY")) && BilibiliLoginConfig.Instance.danmuku == 1) {
@@ -778,7 +999,7 @@ namespace StreamCore.Bilibili
             {
                 return true;
             }
-            if ((type.Equals("junk") || type.Equals("unkown")) && BilibiliLoginConfig.Instance.junk == 1)
+            if ((type.Equals("junk") || type.Equals("unkown") || type.Equals("banned")) && BilibiliLoginConfig.Instance.junk == 1)
             {
                 return true;
             }
@@ -899,6 +1120,16 @@ namespace StreamCore.Bilibili
                 return newBuffer;
             }
             return new byte[0];
+        }
+
+        private static bool BanListDetect(string content, string type)
+        {
+            foreach (string rule in banListRule[type])
+            {
+                if (rule.Contains(rule))
+                    return true;
+            }
+            return false;
         }
     }
 }
