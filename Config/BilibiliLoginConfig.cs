@@ -1,4 +1,5 @@
-﻿using StreamCore.SimpleJSON;
+﻿using StreamCore.Bilibili;
+using StreamCore.SimpleJSON;
 using StreamCore.Utils;
 using System;
 using System.Collections.Generic;
@@ -130,6 +131,57 @@ namespace StreamCore.Config
             if (ConfigChangedEvent != null)
             {
                 ConfigChangedEvent(this);
+            }
+        }
+
+        public static void BanListConfigLoad()
+        {
+            string banListFilePath = Path.Combine(Globals.DataPath, "BanList.ini");
+            BilibiliWebSocketClient.banListRule.Add("uid", new List<string>());
+            BilibiliWebSocketClient.banListRule.Add("username", new List<string>());
+            BilibiliWebSocketClient.banListRule.Add("danmuku", new List<string>());
+            if (File.Exists(banListFilePath))
+            {
+                string[] allRules = File.ReadAllLines(banListFilePath);
+                foreach (string rule_str in allRules)
+                {
+                    if (!rule_str.StartsWith("#")) {
+                        try
+                        {
+                            var rule = JSON.Parse(rule_str);
+                            if (!(rule["type"] is null) && (rule["type"].ToString().ToLower() == "uid" || rule["type"].ToString().ToLower() == "username" || rule["type"].ToString().ToLower() == "danmuku") && !(rule["rule"] is null) && rule["rule"].ToString().Trim() != "")
+                            {
+                                BilibiliWebSocketClient.banListRule[rule["type"].ToString().ToLower()].Add(rule["rule"]);
+                            }
+                        }
+                        catch (Exception e) {
+                            
+                        }
+                        
+                    }
+                }
+            }
+            else
+            {
+                string[] sampleLines = {
+                    "# This is the configuration for danmuku or user ban list.",
+                    "# Lines start with '#' will not loaded. Make sure your active rules start without '#'!",
+                    "# Each line represent a rule in JSON format.",
+                    "# Here are three sample rules represent ban danmuku according to 'username', 'uid', and 'content':",
+                    "# {\"type\": \"username\", \"rule\": \"user123\"}",
+                    "# {\"type\": \"uid\", \"rule\": \"123456789\"}",
+                    "# {\"type\": \"content\", \"rule\": \"abcdefg\"}",
+                    "# ",
+                    "# 这里是和谐弹幕和用户的配置文件",
+                    "# 以'#'开头的行不会被加载，所以确保要生效的规则不以'#'开头！",
+                    "# 每一行代表一条和谐规则，并且格式为JSON",
+                    "# 下面的三条示例分别代表以“用户名(username)”，“用户id(uid)”，以及“内容(content)”的和谐规则：",
+                    "# {\"type\": \"username\", \"rule\": \"user123\"}",
+                    "# {\"type\": \"uid\", \"rule\": \"123456789\"}",
+                    "# {\"type\": \"content\", \"rule\": \"abcdefg\"}",
+                    "# "
+                };
+                File.WriteAllLines(banListFilePath, sampleLines);
             }
         }
     }

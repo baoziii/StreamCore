@@ -32,6 +32,7 @@ namespace StreamCore.Bilibili
                 var NewChannelInfo = JSONObject.Parse(await httpClient.GetStringAsync(BilibiliChannelInfoApi + channelId));
                 if (NewChannelInfo["data"]["room_info"]["room_id"] != String.Empty)
                 {
+                    BilibiliWebSocketClient.BilibiliChannelMaster = NewChannelInfo["data"]["room_info"]["uid"].ToString();
                     channelId = int.Parse(NewChannelInfo["data"]["room_info"]["room_id"]);
                     BilibiliWebSocketClient.RealBilibiliChannelId = channelId;
                 }
