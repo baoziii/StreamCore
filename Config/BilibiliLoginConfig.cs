@@ -137,29 +137,32 @@ namespace StreamCore.Config
         public static void BanListConfigLoad()
         {
             string banListFilePath = Path.Combine(Globals.DataPath, "BanList.ini");
+            
             BilibiliWebSocketClient.banListRule.Add("uid", new List<string>());
             BilibiliWebSocketClient.banListRule.Add("username", new List<string>());
-            BilibiliWebSocketClient.banListRule.Add("danmuku", new List<string>());
+            BilibiliWebSocketClient.banListRule.Add("content", new List<string>());
             if (File.Exists(banListFilePath))
             {
                 string[] allRules = File.ReadAllLines(banListFilePath);
+                int count = 0;
                 foreach (string rule_str in allRules)
                 {
-                    if (!rule_str.StartsWith("#")) {
+                    if (!rule_str.StartsWith("#") && rule_str.Trim() != "") {
                         try
                         {
                             var rule = JSON.Parse(rule_str);
-                            if (!(rule["type"] is null) && (rule["type"].ToString().ToLower() == "uid" || rule["type"].ToString().ToLower() == "username" || rule["type"].ToString().ToLower() == "danmuku") && !(rule["rule"] is null) && rule["rule"].ToString().Trim() != "")
+                            if (!(rule["type"].Value is null) && !(rule["rule"].Value is null) && (rule["type"].Value.ToString() == "uid" || rule["type"].Value.ToString() == "username" || rule["type"].Value.ToString() == "content") && (rule["rule"].Value.ToString().Trim() != ""))
                             {
-                                BilibiliWebSocketClient.banListRule[rule["type"].ToString().ToLower()].Add(rule["rule"]);
+                                BilibiliWebSocketClient.banListRule[rule["type"].Value.ToString().ToLower()].Add(rule["rule"]);
+                                count++;
                             }
                         }
                         catch (Exception e) {
-                            
+                            Plugin.Log($"Adding Rules Exception: {e.ToString()}");
                         }
-                        
                     }
                 }
+                Plugin.Log((count > 1) ? $"{count} Rules" : $"{count} Rule" + " loaded.");
             }
             else
             {
@@ -182,6 +185,7 @@ namespace StreamCore.Config
                     "# "
                 };
                 File.WriteAllLines(banListFilePath, sampleLines);
+                Plugin.Log("BanList.ini created.");
             }
         }
     }

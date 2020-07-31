@@ -1,7 +1,7 @@
 {
     "latest": {
-        "VersionNumber": 2280,
-        "Version": "v2.2.8-Alpha1",
+        "VersionNumber": 2282,
+        "Version": "v2.2.8-Alpha2",
         "ChangeLog": {
             "English": "①Add danmuku command support. ②Add ban list configuration.",
             "ChineseSimplified": "①新增弹幕指令支持。②增加和谐列表配置文件。"
@@ -9,6 +9,15 @@
         "Download": "https://github.com/baoziii/StreamCore/releases/"
     },
     "history": [
+        {
+            "VersionNumber": 2280,
+            "Version": "v2.2.8-Alpha1",
+            "ChangeLog": {
+                "English": "①Add danmuku command support. ②Add ban list configuration.",
+                "ChineseSimplified": "①新增弹幕指令支持。②增加和谐列表配置文件。"
+            },
+            "Download": "https://github.com/baoziii/StreamCore/releases/"
+        },
         {
             "VersionNumber": 2270,
             "Version": "v2.2.7",
