@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using WebSocketSharp;
 using BitConverterNew;
+using System.Data;
 
 namespace StreamCore.Bilibili
 {
@@ -516,7 +517,7 @@ namespace StreamCore.Bilibili
             BilibiliMessage bilibiliMsg = new BilibiliMessage();
             bilibiliMsg.message = "";
             bilibiliMsg.messageType = "";
-            Plugin.Log("Action: " + action.ToString());
+            /*Plugin.Log("Action: " + action.ToString());*/
             
             switch (action)
             {
@@ -548,7 +549,7 @@ namespace StreamCore.Bilibili
                 case 5:
                     json = Encoding.UTF8.GetString(buffer, 0, buffer.Length);
                     var danmuku = JSON.Parse(json);
-                    Plugin.Log(danmuku.ToString());
+                    /*Plugin.Log(danmuku.ToString());*/
                     switch (danmuku["cmd"].Value)
                     {
                         case "DANMU_MSG":
@@ -587,9 +588,10 @@ namespace StreamCore.Bilibili
                                 bilibiliMsg.message = danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;
                                 /*bilibiliMsg.message = "【弹幕】" + danmuku["info"][2][1].Value + ": " + danmuku["info"][1].Value;*/
                                 if (BanListDetect(danmuku["info"][2][0].Value.ToString(), "uid") || BanListDetect(danmuku["info"][2][1].Value.ToString(), "username") || BanListDetect(danmuku["info"][1].Value.ToString(), "content"))
+                                {
                                     bilibiliMsg.MessageType = "banned";
+                                }
                             }
-                            
                             break;
                         case "DANMU_MSG:4:0:2:2:2:0":
                             if ((danmuku["info"][1].Value == "!clr") && (danmuku["info"][2][2].Value == "1" || danmuku["info"][2][0].Value == BilibiliChannelMaster))
@@ -913,22 +915,17 @@ namespace StreamCore.Bilibili
             if (showDanmuku(bilibiliMsg.MessageType))
             {
                 Plugin.Log(bilibiliMsg.message);
-
                 Plugin.Log("Update: " + Update.GetMessage());
-                /*BilibiliMessage bilibiliMsgUpdateInfo = new BilibiliMessage();
-                bilibiliMsgUpdateInfo.message = Update.GetMessage();
-                bilibiliMsgUpdateInfo.MessageType = "Update";*/
                 if (!updateInfoShown && bilibiliMsg.message != "")
                 {
                     Plugin.Log("Show Update Info");
-                    /*BilibiliMessageHandlers.InvokeHandler(bilibiliMsgUpdateInfo, "");*/
                     updateInfoShown = true;
-/*                    if (Update.GetMessage() != "") {
-                        bilibiliMsg.message += "\n" + Update.GetMessage();
-                    }*/
                 }
 
                 BilibiliMessageHandlers.InvokeHandler(bilibiliMsg, "");
+            }
+            else {
+                Plugin.Log("Banned danmuku : {\"type\": \"" + bilibiliMsg.MessageType + "\", Content\": \"" + bilibiliMsg.message + "\"}");
             }
         }
         
@@ -1124,12 +1121,17 @@ namespace StreamCore.Bilibili
 
         private static bool BanListDetect(string content, string type)
         {
-            foreach (string rule in banListRule[type])
-            {
-                if (rule.Contains(rule))
-                    return true;
+            try {
+                foreach (string rule in banListRule[type])
+                {
+                    if (content.Contains(rule))
+                        return true;
+                }
+                return false;
+            } catch (Exception e) {
+                Plugin.Log(e.ToString());
+                return false;
             }
-            return false;
         }
     }
 }
